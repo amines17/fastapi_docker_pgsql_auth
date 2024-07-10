@@ -47,3 +47,76 @@ This project is a starter template for a web application built with FastAPI, int
 
 Here are the Python dependencies used in this project:
 
+fastapi
+uvicorn[standard]
+databases[postgresql]
+sqlalchemy
+asyncpg
+python-jose
+passlib[bcrypt]
+alembic
+psycopg2-binary
+pydantic-settings
+bcrypt==3.2.0
+
+
+## Environment Variables
+
+You can use a `.env` file to manage your environment variables. Create a `.env` file in the root directory of the project and add the following variables :
+```
+DATABASE_URL=postgresql://postgres@db:5432/postgres
+SECRET_KEY=your_secret_key
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+```
+
+Then, modify the `Settings` class in `config.py` to load these variables:
+
+```python
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    DATABASE_URL: str
+    SECRET_KEY: str
+    ALGORITHM: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
+
+    class Config:
+        env_file = ".env"
+
+settings = Settings() 
+```
+
+## Returning Cookies for Authentication
+
+If you want to return cookies instead of relying solely on the JSON response for storing the tokens, you can modify the authentication endpoint like this:
+
+1. Modify the login_for_access_token function in auth.py to set the cookies:
+
+```python
+from fastapi.responses import JSONResponse
+
+@router.post("/token", response_model=schemas.Token)
+def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: Session = Depends(get_db)
+):
+    user = crud.authenticate_user(db, username=form_data.username, password=form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = security.create_access_token(data={"sub": user.username})
+    refresh_token = security.create_refresh_token(data={"sub": user.username})
+    response = JSONResponse(content={"access_token": access_token, "token_type": "bearer", "refresh_token": refresh_token})
+    response.set_cookie(key="access_token", value=access_token, httponly=True)
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True)
+    return response
+```
+
+2. Ensure the cookies are used for subsequent requests by extracting them in your dependency injection or directly in your endpoints.
+
+## Contribution
+Contributions are welcome! Feel free to open an issue or a pull request for any improvements or bug fixes.
